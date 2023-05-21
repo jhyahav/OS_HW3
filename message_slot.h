@@ -1,1 +1,8 @@
+#include <linux/ioctl.h>
+
 #define MAJOR_NUM 235 // hardcoded as per specs
+#define MSG_SLOT_CHANNEL _IOW(MAJOR_NUM, 0, unsigned long)
+#define DEVICE_RANGE_NAME "message_slot"
+#define BUF_LEN 128
+#define DEVICE_FILE_NAME "ms_dev" // FIXME: update this guy if needed
+#define SUCCESS 0
