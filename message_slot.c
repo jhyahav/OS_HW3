@@ -34,7 +34,7 @@ struct Slot
 struct Channel
 {
     int channel_id;
-    char message[BUF_LEN]; // TODO: turn this into a pointer w/o buffer length?
+    char *message;
     ssize_t message_length;
     struct Channel *next;
 };
@@ -69,7 +69,30 @@ static ssize_t device_read(struct file *file,
                            loff_t *offset)
 {
     // TODO: implement
-    return -EINVAL;
+    int message_length = get_current_message_length();
+    char *message = get_current_message();
+
+    return read_from_buffer(buffer, message, message_length);
+    // return -EINVAL;
+}
+
+int check_read_validity()
+{
+    // TODO: implement
+}
+
+ssize_t read_from_buffer(char __user *buffer, char *message, int message_length)
+{
+    int put_user_err;
+    ssize_t num_bytes_read = 0;
+    for (; num_bytes_read < message_length; num_bytes_read++)
+    {
+        put_user_err = put_user(message[num_bytes_read], &buffer[num_bytes_read]);
+        if (put_user_err != SUCCESS)
+        {
+            return put_user_err;
+        }
+    }
 }
 
 //---------------------------------------------------------------
@@ -90,12 +113,22 @@ static ssize_t device_write(struct file *file,
 
 ssize_t write_from_buffer(const char __user *buffer, size_t length)
 {
+    int get_user_err;
     reset_current_message();
+    allocate_current_message(length);
     char *message = get_current_message();
+    if (message == NULL) // if kmalloc failed
+    {
+        return -1;
+    }
     ssize_t num_bytes_written = 0;
     for (; num_bytes_written < length; num_bytes_written++)
     {
-        get_user(message[num_bytes_written], &buffer[num_bytes_written]);
+        get_user_err = get_user(message[num_bytes_written], &buffer[num_bytes_written]);
+        if (get_user_err != SUCCESS)
+        {
+            return get_user_err;
+        }
     }
 
     set_current_message_length(num_bytes_written);
@@ -220,7 +253,7 @@ static char *get_current_message(void)
 static void allocate_current_message(size_t size)
 {
     struct Channel *current_channel = get_current_channel();
-    current_channel->message = (char *)kmalloc()
+    current_channel->message = (char *)kmalloc(size, GFP_KERNEL); // TODO: consider changing size to BUF_LEN
 }
 
 static void *reset_current_message(void)
