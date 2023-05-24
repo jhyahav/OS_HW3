@@ -36,17 +36,17 @@ ssize_t read_buffer(char __user *buffer, char *message, int message_length);
 
 ssize_t write_buffer(const char __user *buffer, size_t length);
 
-int set_channel_and_check_write_validity(file *file, size_t length);
+int set_channel_and_check_write_validity(struct file *file, size_t length);
 
-int set_channel_from_file(file *file);
+int set_channel_from_file(struct file *file);
 
 int is_valid_write_length(int length);
 
 static void clean_up_memory(void);
 
-static Channel *get_current_channel(void);
+static struct Channel *get_current_channel(void);
 
-static void set_current_channel(Channel *channel);
+static void set_current_channel(struct Channel *channel);
 
 static u_int32_t get_channel_count(void);
 
@@ -66,6 +66,6 @@ static int get_current_channel_id(void);
 
 static void set_current_channel_id(int id);
 
-static Channel *get_next_channel(void);
+static struct Channel *get_next_channel(void);
 
-static void set_next_channel(Channel *next_channel);
+static void set_next_channel(struct Channel *next_channel);

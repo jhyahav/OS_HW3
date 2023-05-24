@@ -16,8 +16,8 @@
 MODULE_LICENSE("GPL");
 
 // These are treated as "private" variables
-static struct Slot *slot_linked_list_head;
-static struct Slot *current_slot;
+static struct Slot *slot_linked_list_head = NULL;
+static struct Slot *current_slot = NULL;
 
 // Structs are read & manipulated using getter/setter functions. See end of file.
 
@@ -26,8 +26,41 @@ static int device_open(struct inode *inode,
                        struct file *file)
 {
 
-    unsigned int minor = iminor(inode);
+    int minor = iminor(inode);
+    struct Slot *slot = get_slot_ll_head();
+    while (slot->next_slot != NULL)
+    {
+        if (slot->minor == minor)
+        {
+            set_current_slot(slot);
+            return SUCCESS;
+        }
+        slot = slot->next_slot;
+    }
 
+    set_current_slot(slot); // last slot in linked list
+    if (get_current_slot_minor() == minor)
+    {
+        return SUCCESS;
+    }
+
+    return append_slot_to_ll(minor, get_current_slot());
+}
+
+static int append_slot_to_ll(int minor, struct Slot *tail)
+{
+    void *new_slot_address = (struct Slot *)kmalloc(sizeof(struct Slot), GFP_KERNEL);
+    if (!new_slot_address)
+    {
+        return -ENOMEM;
+    }
+    set_current_slot(tail); // we should enter this function with tail already current, but just in case
+    set_next_slot(new_slot_address);
+    set_current_slot(new_slot_address);
+    set_current_slot_minor(minor);
+    set_channel_count(0);
+    set_slot_channel_ll_head(NULL);
+    set_current_channel(NULL);
     return SUCCESS;
 }
 
@@ -35,7 +68,7 @@ static int device_open(struct inode *inode,
 static int device_release(struct inode *inode,
                           struct file *file)
 {
-    // TODO: implement
+    // TODO: implement: clean up file->private_data
     return SUCCESS;
 }
 
@@ -123,7 +156,7 @@ ssize_t write_buffer(const char __user *buffer, size_t length)
     char *message = get_current_message();
     if (message == NULL) // if kmalloc failed
     {
-        return -1;
+        return -ENOMEM;
     }
     ssize_t num_bytes_written = 0;
     for (; num_bytes_written < length; num_bytes_written++)
@@ -176,8 +209,15 @@ static long device_ioctl(struct file *file,
     return SUCCESS;
 }
 
-static void initialize_slot_channel_ll(int id)
+static int initialize_slot_channel_ll(int id)
 {
+    void *new_channel_address = kmalloc(sizeof(struct Channel), GFP_KERNEL);
+    if (new_channel_address)
+    {
+        return -ENOMEM;
+    }
+    set_slot_channel_ll_head((struct Channel *)new_channel_address);
+    set_current_channel(get_slot_channel_ll_head());
     struct Channel *head = get_slot_channel_ll_head(); // TODO: make sure I work...
     set_channel_count(get_channel_count() + 1);
     set_current_channel(head);
@@ -303,6 +343,26 @@ static void set_slot_ll_head(struct Slot *slot)
     slot_linked_list_head = slot;
 }
 
+static int get_current_slot_minor(void)
+{
+    return get_current_slot()->minor;
+}
+
+static void set_current_slot_minor(int minor)
+{
+    get_current_slot()->minor = minor;
+}
+
+static struct Slot *get_next_slot(void)
+{
+    return get_current_slot()->next_slot;
+}
+
+static void *set_next_slot(struct Slot *slot)
+{
+    get_current_slot()->next_slot = slot;
+}
+
 static struct Channel *get_current_channel(void)
 {
     return get_current_slot()->current_channel;
@@ -326,6 +386,11 @@ static void set_channel_count(u_int32_t count)
 static struct Channel *get_slot_channel_ll_head()
 {
     return get_current_slot()->channel_linked_list_head;
+}
+
+static void set_slot_channel_ll_head(struct Channel *channel)
+{
+    get_current_slot()->channel_linked_list_head = channel;
 }
 
 static char *get_current_message(void)
