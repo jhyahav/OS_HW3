@@ -15,30 +15,7 @@
 
 MODULE_LICENSE("GPL");
 
-//================== DATA STRUCTURES ===========================
-/*
-    Each Slot comprises Channels which are linked to each other.
-    The Slots make up a linked list of the minor nodes we need.
-    Each Channel has an ID and a message.
-*/
-
-struct Slot
-{
-    int minor;
-    struct Slot *next_slot;
-    uint32_t channel_count;
-    struct Channel *channel_linked_list_head;
-    struct Channel *current_channel;
-};
-
-struct Channel
-{
-    int channel_id;
-    char *message;
-    ssize_t message_length;
-    struct Channel *next;
-};
-
+// These are treated as "private" variables
 static struct Slot *slot_linked_list_head;
 static struct Slot *current_slot;
 
@@ -68,20 +45,19 @@ static ssize_t device_read(struct file *file,
                            size_t length,
                            loff_t *offset)
 {
-    // TODO: implement
+    int validity = set_channel_and_check_read_validity(file, length);
+    if (validity != SUCCESS)
+    {
+        return validity;
+    }
+
     int message_length = get_current_message_length();
     char *message = get_current_message();
 
-    return read_from_buffer(buffer, message, message_length);
-    // return -EINVAL;
+    return read_buffer(buffer, message, message_length);
 }
 
-int check_read_validity()
-{
-    // TODO: implement
-}
-
-ssize_t read_from_buffer(char __user *buffer, char *message, int message_length)
+ssize_t read_buffer(char __user *buffer, char *message, int message_length)
 {
     int put_user_err;
     ssize_t num_bytes_read = 0;
@@ -93,6 +69,34 @@ ssize_t read_from_buffer(char __user *buffer, char *message, int message_length)
             return put_user_err;
         }
     }
+    return num_bytes_read;
+}
+
+int set_channel_and_check_read_validity(struct file *file, int buffer_length)
+{
+    int channel_set = set_channel_from_file(file);
+    if (channel_set != SUCCESS)
+    {
+        return channel_set;
+    }
+
+    int message_length = get_current_message_length();
+
+    int valid_length = is_valid_read_length(message_length, buffer_length);
+    if (valid_length != SUCCESS)
+    {
+        return valid_length;
+    }
+    return SUCCESS;
+}
+
+int is_valid_read_length(int message_length, int buffer_length)
+{
+    if (message_length < 1)
+    {
+        return -EWOULDBLOCK;
+    }
+    return buffer_length < message_length ? -ENOSPC : SUCCESS;
 }
 
 //---------------------------------------------------------------
@@ -102,16 +106,16 @@ static ssize_t device_write(struct file *file,
                             loff_t *offset)
 {
 
-    int validity = set_channel_and_check_validity(file, length);
+    int validity = set_channel_and_check_write_validity(file, length);
     if (validity != SUCCESS)
     {
         return validity;
     }
 
-    return write_from_buffer(buffer, length);
+    return write_buffer(buffer, length);
 }
 
-ssize_t write_from_buffer(const char __user *buffer, size_t length)
+ssize_t write_buffer(const char __user *buffer, size_t length)
 {
     int get_user_err;
     reset_current_message();
@@ -136,7 +140,7 @@ ssize_t write_from_buffer(const char __user *buffer, size_t length)
     return num_bytes_written;
 }
 
-int set_channel_and_check_validity(struct file *file, size_t length)
+int set_channel_and_check_write_validity(struct file *file, size_t length)
 {
     int channel_set = set_channel_from_file(file);
     if (channel_set != SUCCESS)
@@ -144,7 +148,7 @@ int set_channel_and_check_validity(struct file *file, size_t length)
         return channel_set;
     }
 
-    int valid_length = is_valid_length(length);
+    int valid_length = is_valid_write_length(length);
     if (valid_length != SUCCESS)
     {
         return valid_length;
@@ -152,14 +156,7 @@ int set_channel_and_check_validity(struct file *file, size_t length)
     return SUCCESS;
 }
 
-// Returns SUCCESS if set successfully or -EINVAL if invalid
-int set_channel_from_file(struct file *file)
-{
-    // TODO: implement
-    return -EINVAL;
-}
-
-int is_valid_length(int length)
+int is_valid_write_length(int length)
 {
     return length > BUF_LEN || length < 1 ? -EMSGSIZE : SUCCESS;
 }
@@ -169,6 +166,7 @@ static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
                          unsigned long ioctl_param)
 {
+    // TODO: associate file -> private_data with pointer to channel struct
     // TODO: implement init for slot
     if (MSG_SLOT_CHANNEL == ioctl_command_id)
     {
@@ -176,6 +174,16 @@ static long device_ioctl(struct file *file,
     }
 
     return SUCCESS;
+}
+
+static void initialize_slot_channel_ll(int id)
+{
+    struct Channel *head = get_slot_channel_ll_head(); // TODO: make sure I work...
+    set_channel_count(get_channel_count() + 1);
+    set_current_channel(head);
+    set_current_channel_id(id);
+    set_current_message_length(0);
+    set_next_channel(NULL);
 }
 
 //==================== DEVICE SETUP =============================
@@ -223,26 +231,101 @@ static void clean_up_memory(void)
 module_init(device_init);
 module_exit(device_cleanup);
 
+//================== FUNCTIONS FOR STRUCTS ===========================
+
+// Returns SUCCESS if set successfully or -EINVAL if invalid
+int set_channel_from_file(struct file *file)
+{
+    int minor = iminor(file_inode(file));
+    struct Channel *channel = (struct Channel *)file->private_data;
+    int id = get_channel_id(channel);
+    return set_state(minor, id);
+}
+
+static int set_state(int minor, int id)
+{
+    int slot_err = search_and_set_slot_by_minor(minor);
+    int channel_err = search_and_set_channel_by_id(id);
+
+    return slot_err == SUCCESS && channel_err == SUCCESS ? SUCCESS : -EINVAL;
+}
+
+static int search_and_set_slot_by_minor(int minor)
+{
+    struct Slot *slot = get_slot_ll_head();
+    // Standard linked list traversal search
+    while (slot != NULL)
+    {
+        if (slot->minor == minor)
+        {
+            set_current_slot(slot);
+            return SUCCESS;
+        }
+        slot = slot->next_slot;
+    }
+    return -1;
+}
+
+static int search_and_set_channel_by_id(int id)
+{
+    struct Channel *channel = get_slot_channel_ll_head();
+    while (channel != NULL)
+    {
+        if (channel->channel_id == id)
+        {
+            set_current_channel(channel);
+            return SUCCESS;
+        }
+        channel = channel->next;
+    }
+    return -1;
+}
+
 //================== GETTERS & SETTERS ===========================
+
+static struct Slot *get_current_slot(void)
+{
+    return current_slot;
+}
+
+static void set_current_slot(struct Slot *slot)
+{
+    current_slot = slot;
+}
+
+static struct Slot *get_slot_ll_head(void)
+{
+    return slot_linked_list_head;
+}
+
+static void set_slot_ll_head(struct Slot *slot)
+{
+    slot_linked_list_head = slot;
+}
 
 static struct Channel *get_current_channel(void)
 {
-    return current_slot->current_channel;
+    return get_current_slot()->current_channel;
 }
 
 static void set_current_channel(struct Channel *channel)
 {
-    current_slot->current_channel = channel;
+    get_current_slot()->current_channel = channel;
 }
 
 static u_int32_t get_channel_count(void)
 {
-    return current_slot->channel_count;
+    return get_current_slot()->channel_count;
 }
 
 static void set_channel_count(u_int32_t count)
 {
-    current_slot->channel_count = count;
+    get_current_slot()->channel_count = count;
+}
+
+static struct Channel *get_slot_channel_ll_head()
+{
+    return get_current_slot()->channel_linked_list_head;
 }
 
 static char *get_current_message(void)
@@ -278,6 +361,11 @@ static void set_current_message_length(int length)
 static int get_current_channel_id(void)
 {
     return get_current_channel()->channel_id;
+}
+
+static int get_channel_id(struct Channel *channel)
+{
+    return channel->channel_id;
 }
 
 static void set_current_channel_id(int id)
