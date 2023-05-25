@@ -197,33 +197,100 @@ int is_valid_write_length(int length)
 //----------------------------------------------------------------
 static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
-                         unsigned long ioctl_param)
+                         unsigned long ioctl_param) // FIXME: should last param be int instead of long?
 {
-    // TODO: associate file -> private_data with pointer to channel struct
-    // TODO: implement init for slot
-    if (MSG_SLOT_CHANNEL == ioctl_command_id)
+    int validity = is_valid_ioctl_op(ioctl_command_id, ioctl_param);
+    if (validity != SUCCESS)
     {
-        // TODO: implement
+        return validity;
+    }
+    int channel_err = find_or_create_channel(ioctl_param);
+    if (channel_err != SUCCESS)
+    {
+        return channel_err;
     }
 
+    // After the above, the current channel should be the one we want
+    write_channel_to_file(file, get_current_channel());
     return SUCCESS;
 }
 
-static int initialize_slot_channel_ll(int id)
+static int is_valid_ioctl_op(unsigned int ioctl_command_id, unsigned int channel_id)
 {
-    void *new_channel_address = kmalloc(sizeof(struct Channel), GFP_KERNEL);
+    return ioctl_command_id == MSG_SLOT_CHANNEL && channel_id != 0 ? SUCCESS : -EINVAL;
+}
+
+static int find_or_create_channel(unsigned int channel_id)
+{
+    if (get_channel_count() == 0)
+    {
+        return initialize_slot_channel_ll(channel_id);
+    }
+    return find_or_append_channel_in_existing_ll(channel_id);
+}
+
+// TODO: check updated instructions - can ioctl raise ENOMEM?
+static int initialize_slot_channel_ll(unsigned int id)
+{
+    void *new_channel_address = (struct Channel *)kmalloc(sizeof(struct Channel), GFP_KERNEL);
     if (new_channel_address)
     {
         return -ENOMEM;
     }
-    set_slot_channel_ll_head((struct Channel *)new_channel_address);
+    set_slot_channel_ll_head(new_channel_address);
     set_current_channel(get_slot_channel_ll_head());
-    struct Channel *head = get_slot_channel_ll_head(); // TODO: make sure I work...
+    initialize_current_channel(id);
+    return SUCCESS;
+}
+
+static int find_or_append_channel_in_existing_ll(unsigned int channel_id)
+{
+    struct Channel *channel = get_slot_channel_ll_head();
+    while (channel->next != NULL)
+    {
+        if (channel->channel_id == channel_id)
+        {
+            set_current_channel(channel);
+            return SUCCESS;
+        }
+        channel = channel->next;
+    }
+
+    set_current_channel(channel); // last channel in linked list
+    if (get_current_channel_id() == channel_id)
+    {
+        return SUCCESS;
+    }
+
+    return append_channel_to_ll(channel_id, get_current_channel());
+}
+
+static int append_channel_to_ll(unsigned int id, struct Channel *tail)
+{
+    void *new_channel_address = (struct Channel *)kmalloc(sizeof(struct Channel), GFP_KERNEL);
+    if (!new_channel_address) // TODO: optimize me/move to specialized function!
+    {
+        return -ENOMEM;
+    }
+    set_current_channel(tail);
+    set_next_channel(new_channel_address);
+    set_current_channel(new_channel_address);
+    initialize_current_channel(id);
+    return SUCCESS;
+}
+
+static void initialize_current_channel(unsigned int id)
+{
     set_channel_count(get_channel_count() + 1);
-    set_current_channel(head);
     set_current_channel_id(id);
     set_current_message_length(0);
+    // TODO: set empty message here?
     set_next_channel(NULL);
+}
+
+static void write_channel_to_file(struct file *file, struct Channel *channel)
+{
+    file->private_data = (void *)channel;
 }
 
 //==================== DEVICE SETUP =============================
