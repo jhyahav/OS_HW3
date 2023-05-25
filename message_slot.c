@@ -59,6 +59,7 @@ static int append_slot_to_ll(int minor, struct Slot *tail)
     set_current_slot(new_slot_address);
     set_current_slot_minor(minor);
     set_channel_count(0);
+    set_next_slot(NULL); // FIXME:?
     set_slot_channel_ll_head(NULL);
     set_current_channel(NULL);
     return SUCCESS;
@@ -275,6 +276,7 @@ static int append_channel_to_ll(unsigned int id, struct Channel *tail)
     set_current_channel(tail);
     set_next_channel(new_channel_address);
     set_current_channel(new_channel_address);
+    set_next_channel(NULL); // FIXME: ? make sure this is properly set whenever appending to linked list
     initialize_current_channel(id);
     return SUCCESS;
 }
@@ -297,14 +299,14 @@ static void write_channel_to_file(struct file *file, struct Channel *channel)
 struct file_operations Fops = {
     .owner = THIS_MODULE,
     .read = device_read,
-    .write = device_write, // FIXME: Fops is good to go
+    .write = device_write,
     .open = device_open,
     .unlocked_ioctl = device_ioctl,
     .release = device_release,
 };
 
 //---------------------------------------------------------------
-static int __init device_init(void) // FIXME: good to go
+static int __init device_init(void)
 {
     int rc = -1;
     rc = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops);
@@ -316,24 +318,66 @@ static int __init device_init(void) // FIXME: good to go
         return rc;
     }
 
+    int slot_err = initialize_slot_ll_head();
+    if (slot_err != SUCCESS)
+    {
+        return slot_err;
+    }
+
     printk("message_slot initialization was successful.");
 
     return SUCCESS;
 }
 
+static int initialize_slot_ll_head(void)
+{
+    void *new_head_slot_address = (struct Slot *)kmalloc(sizeof(struct Slot), GFP_KERNEL);
+    if (!new_head_slot_address)
+    {
+        return -ENOMEM;
+    }
+    set_slot_ll_head(new_head_slot_address);
+    set_current_slot(new_head_slot_address);
+    set_next_slot(NULL);
+    set_slot_channel_ll_head(NULL);
+    set_current_channel(NULL);
+    set_channel_count(0);
+    set_current_slot_minor(UNDEFINED);
+}
+
 //---------------------------------------------------------------
 static void __exit device_cleanup(void)
 {
-    clean_up_memory();
+    clean_up_slots();
     unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
 }
 
-//---------------------------------------------------------------
-
-static void clean_up_memory(void)
+static void clean_up_slots(void)
 {
-    // TODO: implement
+    struct Slot *next_slot;
+    set_current_slot(get_slot_ll_head());
+    while (get_current_slot() != NULL)
+    {
+        next_slot = get_next_slot();
+        clean_up_channels();
+        kfree(get_current_slot());
+        set_current_slot(next_slot);
+    }
 }
+
+static void clean_up_channels()
+{
+    struct Channel *next_channel;
+    set_current_channel(get_slot_channel_ll_head());
+    while (get_current_channel() != NULL)
+    {
+        next_channel = get_next_channel();
+        kfree(get_current_channel());
+        set_current_channel(next_channel);
+    }
+}
+
+//---------------------------------------------------------------
 
 module_init(device_init);
 module_exit(device_cleanup);
