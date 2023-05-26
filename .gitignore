@@ -2,3 +2,10 @@
 /.tmp_6000
 a.out
 *.d
+*.ko
+*.o
+*.order
+*.symvers
+*.cmd
+*.mod
+*.mod.c

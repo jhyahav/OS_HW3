@@ -66,6 +66,10 @@ static int search_and_set_slot_by_minor(int minor);
 
 static int search_and_set_channel_by_id(int id);
 
+static struct Slot *get_current_slot(void);
+
+static void set_current_slot(struct Slot *slot);
+
 static struct Slot *get_slot_ll_head(void);
 
 static void set_slot_ll_head(struct Slot *slot);
@@ -76,7 +80,7 @@ static void set_current_slot_minor(int minor);
 
 static struct Slot *get_next_slot(void);
 
-static void *set_next_slot(struct Slot *slot);
+static void set_next_slot(struct Slot *slot);
 
 static int is_valid_write_length(int length);
 
@@ -98,7 +102,7 @@ static int initialize_slot_ll_head(void);
 
 static void clean_up_slots(void);
 
-static void clean_up_channels();
+static void clean_up_channels(void);
 
 static struct Channel *get_current_channel(void);
 
@@ -108,7 +112,7 @@ static u_int32_t get_channel_count(void);
 
 static void set_channel_count(u_int32_t count);
 
-static struct Channel *get_slot_channel_ll_head();
+static struct Channel *get_slot_channel_ll_head(void);
 
 static void set_slot_channel_ll_head(struct Channel *channel);
 
@@ -116,7 +120,7 @@ static char *get_current_message(void);
 
 static void allocate_current_message(size_t size);
 
-static void *reset_current_message(void);
+static void reset_current_message(void);
 
 static int get_current_message_length(void);
 
@@ -190,14 +194,16 @@ static ssize_t device_read(struct file *file,
                            size_t length,
                            loff_t *offset)
 {
+    int message_length;
+    char *message;
     int validity = set_channel_and_check_read_validity(file, length);
     if (validity != SUCCESS)
     {
         return validity;
     }
 
-    int message_length = get_current_message_length();
-    char *message = get_current_message();
+    message_length = get_current_message_length();
+    message = get_current_message();
 
     return read_buffer(buffer, message, message_length);
 }
@@ -221,15 +227,17 @@ static ssize_t read_buffer(char __user *buffer, char *message, int message_lengt
 
 static int set_channel_and_check_read_validity(struct file *file, int buffer_length)
 {
+    int message_length;
+    int valid_length;
     int channel_set = set_channel_from_file(file);
     if (channel_set != SUCCESS)
     {
         return channel_set;
     }
 
-    int message_length = get_current_message_length();
+    message_length = get_current_message_length();
 
-    int valid_length = is_valid_read_length(message_length, buffer_length);
+    valid_length = is_valid_read_length(message_length, buffer_length);
     if (valid_length != SUCCESS)
     {
         return valid_length;
@@ -265,14 +273,16 @@ static ssize_t device_write(struct file *file,
 static ssize_t write_buffer(const char __user *buffer, size_t length)
 {
     int get_user_err;
+    char *message;
+    ssize_t num_bytes_written;
     reset_current_message();
     allocate_current_message(length);
-    char *message = get_current_message();
+    message = get_current_message();
     if (message == NULL) // if kmalloc failed
     {
         return -ENOMEM;
     }
-    ssize_t num_bytes_written = 0;
+    num_bytes_written = 0;
     for (; num_bytes_written < length; num_bytes_written++)
     {
         get_user_err = get_user(message[num_bytes_written], &buffer[num_bytes_written]);
@@ -289,13 +299,15 @@ static ssize_t write_buffer(const char __user *buffer, size_t length)
 
 static int set_channel_and_check_write_validity(struct file *file, size_t length)
 {
-    int channel_set = set_channel_from_file(file);
+    int channel_set;
+    int valid_length;
+    channel_set = set_channel_from_file(file);
     if (channel_set != SUCCESS)
     {
         return channel_set;
     }
 
-    int valid_length = is_valid_write_length(length);
+    valid_length = is_valid_write_length(length);
     if (valid_length != SUCCESS)
     {
         return valid_length;
@@ -313,12 +325,14 @@ static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
                          unsigned long ioctl_param) // FIXME: should last param be int instead of long?
 {
-    int validity = is_valid_ioctl_op(ioctl_command_id, ioctl_param);
+    int validity;
+    int channel_err;
+    validity = is_valid_ioctl_op(ioctl_command_id, ioctl_param);
     if (validity != SUCCESS)
     {
         return validity;
     }
-    int channel_err = find_or_create_channel(ioctl_param);
+    channel_err = find_or_create_channel(ioctl_param);
     if (channel_err != SUCCESS)
     {
         return channel_err;
@@ -421,6 +435,7 @@ struct file_operations Fops = {
 //---------------------------------------------------------------
 static int __init device_init(void)
 {
+    int slot_err;
     int rc = -1;
     rc = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops);
 
@@ -431,7 +446,7 @@ static int __init device_init(void)
         return rc;
     }
 
-    int slot_err = initialize_slot_ll_head();
+    slot_err = initialize_slot_ll_head();
     if (slot_err != SUCCESS)
     {
         return slot_err;
@@ -456,6 +471,7 @@ static int initialize_slot_ll_head(void)
     set_current_channel(NULL);
     set_channel_count(0);
     set_current_slot_minor(UNDEFINED);
+    return SUCCESS;
 }
 
 //---------------------------------------------------------------
@@ -478,7 +494,7 @@ static void clean_up_slots(void)
     }
 }
 
-static void clean_up_channels()
+static void clean_up_channels(void)
 {
     struct Channel *next_channel;
     set_current_channel(get_slot_channel_ll_head());
@@ -583,7 +599,7 @@ static struct Slot *get_next_slot(void)
     return get_current_slot()->next_slot;
 }
 
-static void *set_next_slot(struct Slot *slot)
+static void set_next_slot(struct Slot *slot)
 {
     get_current_slot()->next_slot = slot;
 }
@@ -608,7 +624,7 @@ static void set_channel_count(u_int32_t count)
     get_current_slot()->channel_count = count;
 }
 
-static struct Channel *get_slot_channel_ll_head()
+static struct Channel *get_slot_channel_ll_head(void)
 {
     return get_current_slot()->channel_linked_list_head;
 }
@@ -629,7 +645,7 @@ static void allocate_current_message(size_t size)
     current_channel->message = (char *)kmalloc(size, GFP_KERNEL); // TODO: consider changing size to BUF_LEN
 }
 
-static void *reset_current_message(void)
+static void reset_current_message(void)
 {
     char *current_message = get_current_message();
     if (current_message != NULL)
