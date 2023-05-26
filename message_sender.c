@@ -1,16 +1,18 @@
-#include "message_slot.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include "message_slot.h"
 
 static void check_arguments(int argc);
 static int open_file_for_write(char *path);
 static void set_channel_and_write_message(int fd, unsigned int command_id, int channel_id, char *message);
 static void set_channel(int fd, unsigned int command_id, int channel_id);
 static void write_message(int fd, char *message);
-void error_and_exit(void);
+static void error_and_exit(void);
 
 int main(int argc, char *argv[])
 {
@@ -64,7 +66,7 @@ static void write_message(int fd, char *message)
     }
 }
 
-void error_and_exit(void)
+static void error_and_exit(void)
 {
     perror(strerror(errno));
     exit(EXIT_FAILURE);

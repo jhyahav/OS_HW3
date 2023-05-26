@@ -1,12 +1,22 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+
 #include "message_slot.h"
 
 static void check_arguments(int argc);
+static int open_file_for_read(char *path);
+static int set_channel_and_read_message(int fd, unsigned int command_id, int channel_id, char *buffer);
+static void set_channel(int fd, unsigned int command_id, int channel_id);
+static int read_message(int fd, char *buffer);
+static void print_message(char *buffer, int length);
+static void error_and_exit(void);
 
-int main(int argc, char *argv)
+int main(int argc, char *argv[])
 {
     check_arguments(argc);
     int fd = open_file_for_read(argv[1]);
@@ -68,4 +78,10 @@ static void print_message(char *buffer, int length)
     {
         error_and_exit();
     }
+}
+
+static void error_and_exit(void)
+{
+    perror(strerror(errno));
+    exit(EXIT_FAILURE);
 }
