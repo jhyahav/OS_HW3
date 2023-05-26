@@ -69,7 +69,7 @@ static int append_slot_to_ll(int minor, struct Slot *tail)
 static int device_release(struct inode *inode,
                           struct file *file)
 {
-    // TODO: implement: clean up file->private_data
+    // TODO: implement: clean up file->private_data?
     return SUCCESS;
 }
 
@@ -372,6 +372,7 @@ static void clean_up_channels()
     while (get_current_channel() != NULL)
     {
         next_channel = get_next_channel();
+        reset_current_message();
         kfree(get_current_channel());
         set_current_channel(next_channel);
     }

@@ -1,6 +1,3 @@
-#include <linux/ioctl.h>
-#include <linux/fs.h>
-
 #define MAJOR_NUM 235 // hardcoded as per specs
 #define MSG_SLOT_CHANNEL _IOW(MAJOR_NUM, 0, unsigned long)
 #define DEVICE_RANGE_NAME "message_slot"
@@ -33,11 +30,11 @@ struct Channel
     struct Channel *next;
 };
 
-static int append_slot_to_ll(int minor, Slot *tail);
+static int append_slot_to_ll(int minor, struct Slot *tail);
 
 ssize_t read_buffer(char __user *buffer, char *message, int message_length);
 
-int set_channel_and_check_read_validity(file *file, int buffer_length);
+int set_channel_and_check_read_validity(struct file *file, int buffer_length);
 
 int is_valid_read_length(int message_length, int buffer_length);
 
@@ -53,17 +50,17 @@ static int search_and_set_slot_by_minor(int minor);
 
 static int search_and_set_channel_by_id(int id);
 
-static Slot *get_slot_ll_head(void);
+static struct Slot *get_slot_ll_head(void);
 
-static void set_slot_ll_head(Slot *slot);
+static void set_slot_ll_head(struct Slot *slot);
 
 static int get_current_slot_minor(void);
 
 static void set_current_slot_minor(int minor);
 
-static Slot *get_next_slot(void);
+static struct Slot *get_next_slot(void);
 
-static void *set_next_slot(Slot *slot);
+static void *set_next_slot(struct Slot *slot);
 
 int is_valid_write_length(int length);
 
@@ -75,11 +72,11 @@ static int initialize_slot_channel_ll(unsigned int id);
 
 static int find_or_append_channel_in_existing_ll(unsigned int channel_id);
 
-static int append_channel_to_ll(unsigned int id, Channel *tail);
+static int append_channel_to_ll(unsigned int id, struct Channel *tail);
 
 static void initialize_current_channel(unsigned int id);
 
-static void write_channel_to_file(file *file, Channel *channel);
+static void write_channel_to_file(struct file *file, struct Channel *channel);
 
 static int initialize_slot_ll_head(void);
 
@@ -95,9 +92,9 @@ static u_int32_t get_channel_count(void);
 
 static void set_channel_count(u_int32_t count);
 
-static Channel *get_slot_channel_ll_head();
+static struct Channel *get_slot_channel_ll_head();
 
-static void set_slot_channel_ll_head(Channel *channel);
+static void set_slot_channel_ll_head(struct Channel *channel);
 
 static char *get_current_message(void);
 
@@ -111,7 +108,7 @@ static void set_current_message_length(int length);
 
 static int get_current_channel_id(void);
 
-static int get_channel_id(Channel *channel);
+static int get_channel_id(struct Channel *channel);
 
 static void set_current_channel_id(int id);
 
