@@ -93,6 +93,8 @@ static ssize_t device_read(struct file *file,
 
 ssize_t read_buffer(char __user *buffer, char *message, int message_length)
 {
+    // TODO: add atomicity logic for restoration in case of failure
+    // See https://moodle.tau.ac.il/mod/forum/discuss.php?d=90946
     int put_user_err;
     ssize_t num_bytes_read = 0;
     for (; num_bytes_read < message_length; num_bytes_read++)

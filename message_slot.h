@@ -5,6 +5,7 @@
 #define DEVICE_FILE_NAME "ms_dev" // FIXME: update this guy if needed
 #define SUCCESS 0
 #define UNDEFINED -1
+#define EXIT_FAILURE 1
 
 //================== DATA STRUCTURES ===========================
 /*
