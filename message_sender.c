@@ -3,16 +3,22 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
 
 static void check_arguments(int argc);
+static int open_file_for_write(char *path);
+static void set_channel_and_write_message(int fd, unsigned int command_id, int channel_id, char *message);
+static void set_channel(int fd, unsigned int command_id, int channel_id);
+static void write_message(int fd, char *message);
+void error_and_exit(void);
 
 int main(int argc, char *argv[])
 {
     check_arguments(argc);
-    int fd = open_file(argv[1]);
+    int fd = open_file_for_write(argv[1]);
     set_channel_and_write_message(fd, MSG_SLOT_CHANNEL, atoi(argv[2]), argv[3]);
     close(fd);
-    exit(SUCCESS);
+    return SUCCESS;
 }
 
 static void check_arguments(int argc)
@@ -24,9 +30,9 @@ static void check_arguments(int argc)
     }
 }
 
-static int open_file(char *path)
+static int open_file_for_write(char *path)
 {
-    int fd = open(path, O_RDONLY);
+    int fd = open(path, O_WRONLY);
     if (fd < 0)
     {
         error_and_exit();
@@ -37,6 +43,7 @@ static int open_file(char *path)
 static void set_channel_and_write_message(int fd, unsigned int command_id, int channel_id, char *message)
 {
     set_channel(fd, command_id, channel_id);
+    write_message(fd, message);
 }
 
 static void set_channel(int fd, unsigned int command_id, int channel_id)
@@ -51,13 +58,13 @@ static void set_channel(int fd, unsigned int command_id, int channel_id)
 static void write_message(int fd, char *message)
 {
     int write_err = write(fd, message, strlen(message));
-    if (write_err != 0)
+    if (write_err < 0)
     {
         error_and_exit();
     }
 }
 
-static void error_and_exit(void)
+void error_and_exit(void)
 {
     perror(strerror(errno));
     exit(EXIT_FAILURE);
