@@ -24,7 +24,6 @@ int main(int argc, char *argv[])
     int bytes_read = set_channel_and_read_message(fd, MSG_SLOT_CHANNEL, atoi(argv[2]), buffer);
     print_message(buffer, bytes_read);
     return 0;
-    ;
 }
 
 static void check_arguments(int argc)
@@ -63,7 +62,7 @@ static void set_channel(int fd, unsigned int command_id, int channel_id)
 
 static int read_message(int fd, char *buffer)
 {
-    int bytes_read = read(fd, buffer, strlen(buffer));
+    int bytes_read = read(fd, buffer, BUF_LEN);
     if (bytes_read < 0)
     {
         error_and_exit();

@@ -1,5 +1,7 @@
 /.vscode
 /.tmp_6000
+message_reader
+message_sender
 a.out
 *.d
 *.ko

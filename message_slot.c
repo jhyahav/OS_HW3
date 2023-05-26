@@ -361,7 +361,7 @@ static int find_or_create_channel(unsigned int channel_id)
 static int initialize_slot_channel_ll(unsigned int id)
 {
     void *new_channel_address = (struct Channel *)kmalloc(sizeof(struct Channel), GFP_KERNEL);
-    if (new_channel_address)
+    if (!new_channel_address)
     {
         return -ENOMEM;
     }
