@@ -2,6 +2,8 @@
 /.tmp_6000
 message_reader
 message_sender
+tester
+tester2
 a.out
 *.d
 *.ko

@@ -9,7 +9,6 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-// #include <linux/string.h> TODO: check if needed
 #include <linux/slab.h>
 #include "message_slot.h"
 
@@ -174,7 +173,7 @@ static int append_slot_to_ll(int minor, struct Slot *tail)
     set_current_slot(new_slot_address);
     set_current_slot_minor(minor);
     set_channel_count(0);
-    set_next_slot(NULL); // FIXME:?
+    set_next_slot(NULL);
     set_slot_channel_ll_head(NULL);
     set_current_channel(NULL);
     return SUCCESS;
@@ -184,7 +183,6 @@ static int append_slot_to_ll(int minor, struct Slot *tail)
 static int device_release(struct inode *inode,
                           struct file *file)
 {
-    // TODO: implement: clean up file->private_data?
     return SUCCESS;
 }
 
@@ -403,7 +401,7 @@ static int append_channel_to_ll(unsigned int id, struct Channel *tail)
     set_current_channel(tail);
     set_next_channel(new_channel_address);
     set_current_channel(new_channel_address);
-    set_next_channel(NULL); // FIXME: ? make sure this is properly set whenever appending to linked list
+    set_next_channel(NULL);
     initialize_current_channel(id);
     return SUCCESS;
 }
@@ -661,7 +659,7 @@ static int get_current_message_length(void)
 
 static void set_current_message_length(int length)
 {
-    get_current_channel()->message_length = length; // TODO: make sure I work!
+    get_current_channel()->message_length = length;
 }
 
 static int get_current_channel_id(void)

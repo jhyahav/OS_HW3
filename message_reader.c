@@ -23,6 +23,7 @@ int main(int argc, char *argv[])
     char buffer[BUF_LEN];
     int bytes_read = set_channel_and_read_message(fd, MSG_SLOT_CHANNEL, atoi(argv[2]), buffer);
     print_message(buffer, bytes_read);
+    close(fd);
     return 0;
 }
 
