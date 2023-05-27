@@ -31,7 +31,8 @@ static void check_arguments(int argc)
 {
     if (argc != 3)
     {
-        perror("Incorrect number of arguments for message_reader.c.\n");
+        errno = EINVAL;
+        perror("Incorrect number of arguments for message_reader.c");
         exit(EXIT_FAILURE);
     }
 }
