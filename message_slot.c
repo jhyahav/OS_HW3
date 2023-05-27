@@ -51,7 +51,7 @@ static ssize_t read_buffer(char __user *buffer, size_t buffer_length, char *mess
 
 static int back_up_user_buffer(char __user *buffer, size_t buffer_length, char *backup_buffer);
 
-static void restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer);
+static int restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer);
 
 static int set_channel_and_check_read_validity(struct file *file, int buffer_length);
 
@@ -216,14 +216,14 @@ static ssize_t device_read(struct file *file,
 
 static ssize_t read_buffer(char __user *buffer, size_t buffer_length, char *message, int message_length)
 {
+    ssize_t num_bytes_read = 0;
+    char *backup_buffer = NULL;
     int put_user_err;
-    char *backup_buffer;
     int backup_err = back_up_user_buffer(buffer, buffer_length, backup_buffer);
     if (backup_err != SUCCESS)
     {
         return backup_err;
     }
-    ssize_t num_bytes_read = 0;
     for (; num_bytes_read < message_length; num_bytes_read++)
     {
         put_user_err = put_user(message[num_bytes_read], &buffer[num_bytes_read]);
@@ -241,19 +241,23 @@ static ssize_t read_buffer(char __user *buffer, size_t buffer_length, char *mess
 static int back_up_user_buffer(char __user *buffer, size_t buffer_length, char *backup_buffer)
 {
     backup_buffer = (char *)kmalloc(buffer_length, GFP_KERNEL);
-    int i = 0;
     if (!backup_buffer)
     {
         return -ENOMEM;
+    }
+    if (!buffer)
+    {
+        return -EINVAL;
     }
 
     return -copy_from_user(backup_buffer, buffer, buffer_length); // 0 if successful, negative otherwise
 }
 
-static void restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer)
+static int restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer)
 {
-    copy_to_user(buffer, backup_buffer, buffer_length);
+    int copy_err = copy_to_user(buffer, backup_buffer, buffer_length);
     kfree(backup_buffer);
+    return copy_err;
 }
 
 static int set_channel_and_check_read_validity(struct file *file, int buffer_length)
@@ -303,7 +307,7 @@ static ssize_t device_write(struct file *file,
 
 static ssize_t write_buffer(const char __user *buffer, size_t length)
 {
-    char *previous_message;
+    char *previous_message = NULL;
     int backup_err;
     int backup_length;
     int get_user_err;
@@ -311,6 +315,10 @@ static ssize_t write_buffer(const char __user *buffer, size_t length)
     ssize_t num_bytes_written;
     backup_length = get_current_message_length();
     backup_err = back_up_current_message(previous_message);
+    if (!buffer)
+    {
+        return -EINVAL;
+    }
     if (backup_err != SUCCESS)
     {
         return backup_err;
