@@ -239,6 +239,6 @@ if __name__ == '__main__':
     test_empty_write_fails()
     test_can_print_not_to_large()
 
-    test_random_operations(amount=10000)
+    test_random_operations(amount=1000000)
 
     delete_all_files()

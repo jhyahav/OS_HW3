@@ -516,8 +516,14 @@ module_exit(device_cleanup);
 static int set_channel_from_file(struct file *file)
 {
     int minor = iminor(file_inode(file));
-    struct Channel *channel = (struct Channel *)file->private_data;
-    int id = get_channel_id(channel);
+    int id;
+    struct Channel *channel;
+    if (file->private_data == NULL)
+    { // if read/write attempted before ioctl invoked
+        return -EINVAL;
+    }
+    channel = (struct Channel *)file->private_data;
+    id = get_channel_id(channel);
     return set_state(minor, id);
 }
 
