@@ -321,7 +321,7 @@ static int is_valid_write_length(int length)
 //----------------------------------------------------------------
 static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
-                         unsigned long ioctl_param) // FIXME: should last param be int instead of long?
+                         unsigned long ioctl_param)
 {
     int validity;
     int channel_err;
@@ -394,7 +394,7 @@ static int find_or_append_channel_in_existing_ll(unsigned int channel_id)
 static int append_channel_to_ll(unsigned int id, struct Channel *tail)
 {
     void *new_channel_address = (struct Channel *)kmalloc(sizeof(struct Channel), GFP_KERNEL);
-    if (!new_channel_address) // TODO: optimize me/move to specialized function!
+    if (!new_channel_address)
     {
         return -ENOMEM;
     }
@@ -411,7 +411,6 @@ static void initialize_current_channel(unsigned int id)
     set_channel_count(get_channel_count() + 1);
     set_current_channel_id(id);
     set_current_message_length(0);
-    // TODO: set empty message here?
     set_next_channel(NULL);
 }
 
@@ -646,7 +645,7 @@ static char *get_current_message(void)
 static void allocate_current_message(size_t size)
 {
     struct Channel *current_channel = get_current_channel();
-    current_channel->message = (char *)kmalloc(size, GFP_KERNEL); // TODO: consider changing size to BUF_LEN
+    current_channel->message = (char *)kmalloc(size, GFP_KERNEL);
 }
 
 static void reset_current_message(void)
