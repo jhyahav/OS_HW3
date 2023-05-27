@@ -47,13 +47,21 @@ static struct Slot *current_slot = NULL;
 
 static int append_slot_to_ll(int minor, struct Slot *tail);
 
-static ssize_t read_buffer(char __user *buffer, char *message, int message_length);
+static ssize_t read_buffer(char __user *buffer, size_t buffer_length, char *message, int message_length);
+
+static int back_up_user_buffer(char __user *buffer, size_t buffer_length, char *backup_buffer);
+
+static void restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer);
 
 static int set_channel_and_check_read_validity(struct file *file, int buffer_length);
 
 static int is_valid_read_length(int message_length, int buffer_length);
 
 static ssize_t write_buffer(const char __user *buffer, size_t length);
+
+static int back_up_current_message(char *backup);
+
+static void restore_message_on_failure(char *backup, int backup_length);
 
 static int set_channel_and_check_write_validity(struct file *file, size_t length);
 
@@ -203,24 +211,49 @@ static ssize_t device_read(struct file *file,
     message_length = get_current_message_length();
     message = get_current_message();
 
-    return read_buffer(buffer, message, message_length);
+    return read_buffer(buffer, length, message, message_length);
 }
 
-static ssize_t read_buffer(char __user *buffer, char *message, int message_length)
+static ssize_t read_buffer(char __user *buffer, size_t buffer_length, char *message, int message_length)
 {
-    // TODO: add atomicity logic for restoration in case of failure
-    // See https://moodle.tau.ac.il/mod/forum/discuss.php?d=90946
     int put_user_err;
+    char *backup_buffer;
+    int backup_err = back_up_user_buffer(buffer, buffer_length, backup_buffer);
+    if (backup_err != SUCCESS)
+    {
+        return backup_err;
+    }
     ssize_t num_bytes_read = 0;
     for (; num_bytes_read < message_length; num_bytes_read++)
     {
         put_user_err = put_user(message[num_bytes_read], &buffer[num_bytes_read]);
         if (put_user_err != SUCCESS)
         {
+            restore_user_buffer_on_failure(buffer, buffer_length, backup_buffer);
             return put_user_err;
         }
     }
+    kfree(backup_buffer);
     return num_bytes_read;
+}
+
+// Intended to ensure that read operations are atomic.
+static int back_up_user_buffer(char __user *buffer, size_t buffer_length, char *backup_buffer)
+{
+    backup_buffer = (char *)kmalloc(buffer_length, GFP_KERNEL);
+    int i = 0;
+    if (!backup_buffer)
+    {
+        return -ENOMEM;
+    }
+
+    return -copy_from_user(backup_buffer, buffer, buffer_length); // 0 if successful, negative otherwise
+}
+
+static void restore_user_buffer_on_failure(char __user *buffer, size_t buffer_length, char *backup_buffer)
+{
+    copy_to_user(buffer, backup_buffer, buffer_length);
+    kfree(backup_buffer);
 }
 
 static int set_channel_and_check_read_validity(struct file *file, int buffer_length)
@@ -270,9 +303,18 @@ static ssize_t device_write(struct file *file,
 
 static ssize_t write_buffer(const char __user *buffer, size_t length)
 {
+    char *previous_message;
+    int backup_err;
+    int backup_length;
     int get_user_err;
     char *message;
     ssize_t num_bytes_written;
+    backup_length = get_current_message_length();
+    backup_err = back_up_current_message(previous_message);
+    if (backup_err != SUCCESS)
+    {
+        return backup_err;
+    }
     reset_current_message();
     allocate_current_message(length);
     message = get_current_message();
@@ -286,13 +328,45 @@ static ssize_t write_buffer(const char __user *buffer, size_t length)
         get_user_err = get_user(message[num_bytes_written], &buffer[num_bytes_written]);
         if (get_user_err != SUCCESS)
         {
+            restore_message_on_failure(previous_message, backup_length);
             return get_user_err;
         }
     }
 
     set_current_message_length(num_bytes_written);
-
+    kfree(previous_message);
     return num_bytes_written;
+}
+
+static int back_up_current_message(char *backup)
+{
+    int i = 0;
+    char *message = get_current_message();
+    int message_length = get_current_message_length();
+    backup = (char *)kmalloc(message_length, GFP_KERNEL);
+    if (!backup)
+    {
+        return -ENOMEM;
+    }
+    for (; i < message_length; i++)
+    {
+        backup[i] = message[i];
+    }
+    return SUCCESS;
+}
+
+// Intended to ensure that write operations are atomic.
+static void restore_message_on_failure(char *backup, int backup_length)
+{
+    int i = 0;
+    reset_current_message();
+    allocate_current_message(backup_length);
+    set_current_message_length(backup_length);
+    for (; i < backup_length; i++)
+    {
+        get_current_message()[i] = backup[i];
+    }
+    kfree(backup);
 }
 
 static int set_channel_and_check_write_validity(struct file *file, size_t length)
@@ -355,7 +429,6 @@ static int find_or_create_channel(unsigned int channel_id)
     return find_or_append_channel_in_existing_ll(channel_id);
 }
 
-// TODO: check updated instructions - can ioctl raise ENOMEM?
 static int initialize_slot_channel_ll(unsigned int id)
 {
     void *new_channel_address = (struct Channel *)kmalloc(sizeof(struct Channel), GFP_KERNEL);
